@@ -5,6 +5,7 @@ const {
   groupSize,
   autoAssign,
   drawMode,
+  autoGenTarget,
   unassignedTeams,
   schools,
   maxPerSchool,
@@ -27,11 +28,11 @@ const name = ref('')
 const school = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// auto-generate: target teams-per-group (0 = unlimited / fewest groups)
-const targetSize = ref(4)
+// auto-generate: target teams-per-group (0 = unlimited / fewest groups), persisted
 const genGroups = computed(() => {
   const total = teams.value.length
-  const byCap = targetSize.value > 0 ? Math.ceil(total / targetSize.value) : 0
+  const t = Number(autoGenTarget.value)
+  const byCap = t > 0 ? Math.ceil(total / t) : 0
   return Math.max(byCap, minGroupsRequired.value, 1)
 })
 
@@ -55,7 +56,7 @@ function onAutoGenerate() {
     toast.add({ title: 'ยังไม่มีทีมให้จัด', color: 'warning', icon: 'i-lucide-circle-alert' })
     return
   }
-  const { groups, failed } = autoGenerate(targetSize.value)
+  const { groups, failed } = autoGenerate(autoGenTarget.value)
   toast.add({
     title: `สร้าง ${groups} สายแล้ว${failed ? ` · เหลือ ${failed} ทีมติดกติกา` : ''}`,
     color: failed ? 'warning' : 'success',
@@ -246,7 +247,7 @@ function downloadTemplate() {
       </p>
       <div class="flex items-end gap-2">
         <UFormField label="ทีม/สาย (โดยประมาณ)" class="flex-1">
-          <UInput v-model.number="targetSize" type="number" min="0" class="w-full" :disabled="locked" />
+          <UInput v-model.number="autoGenTarget" type="number" min="0" class="w-full" :disabled="locked" />
         </UFormField>
         <UButton color="primary" icon="i-lucide-sparkles" :disabled="locked" @click="onAutoGenerate">
           สร้าง

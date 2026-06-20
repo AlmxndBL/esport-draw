@@ -5,13 +5,47 @@ const {
   groups,
   groupSize,
   assignedCount,
+  autoGenTarget,
+  minGroupsRequired,
   isValidTarget,
   moveToGroup,
   autoFill,
+  autoGenerate,
+  distributeAll,
   exportCsv,
 } = useDraw()
 const { canStartGroup, startGroupStage } = useTournament()
 const toast = useToast()
+
+const genGroups = computed(() => {
+  const total = teams.value.length
+  const t = Number(autoGenTarget.value)
+  const byCap = t > 0 ? Math.ceil(total / t) : 0
+  return Math.max(byCap, minGroupsRequired.value, 1)
+})
+
+function onAutoGenerate() {
+  if (teams.value.length === 0) {
+    toast.add({ title: 'ยังไม่มีทีมให้จัด', color: 'warning', icon: 'i-lucide-circle-alert' })
+    return
+  }
+  const { groups: g, failed } = autoGenerate(autoGenTarget.value)
+  toast.add({
+    title: `สร้าง ${g} สายแล้ว${failed ? ` · เหลือ ${failed} ทีมติดกติกา` : ''}`,
+    color: failed ? 'warning' : 'success',
+    icon: failed ? 'i-lucide-triangle-alert' : 'i-lucide-wand-2',
+  })
+}
+
+function onRedistribute() {
+  if (teams.value.length === 0) return
+  const { failed } = distributeAll()
+  toast.add({
+    title: failed ? `จัดใหม่แล้ว · เหลือ ${failed} ทีมติดกติกา` : 'จัดทีมใหม่ให้สมดุลแล้ว',
+    color: failed ? 'warning' : 'success',
+    icon: 'i-lucide-shuffle',
+  })
+}
 
 // drag = HTML5 drag-and-drop · picked = click-to-select fallback (touch/a11y)
 const dragId = ref<string | null>(null)
@@ -112,6 +146,22 @@ function emptySlots(memberCount: number) {
         <UBadge color="secondary" variant="soft">{{ assignedCount }} จัดแล้ว</UBadge>
       </div>
     </template>
+
+    <!-- auto-generate toolbar -->
+    <div class="border-default bg-elevated/40 flex flex-wrap items-center gap-2 rounded-xl border p-2.5">
+      <UIcon name="i-lucide-wand-2" class="text-primary size-4" />
+      <span class="text-muted text-xs">ทีม/สาย</span>
+      <UInput v-model.number="autoGenTarget" type="number" min="0" class="w-16" size="sm" />
+      <UButton color="primary" variant="soft" size="sm" icon="i-lucide-sparkles" @click="onAutoGenerate">
+        สร้างสายอัตโนมัติ
+      </UButton>
+      <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-shuffle" @click="onRedistribute">
+        จัดใหม่ให้สมดุล
+      </UButton>
+      <span class="text-muted ml-auto text-[11px]">
+        {{ teams.length }} ทีม → <span class="text-primary font-semibold">{{ genGroups }} สาย</span>
+      </span>
+    </div>
 
     <!-- pool (drag source + drop target for returning teams) -->
     <div

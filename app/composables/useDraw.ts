@@ -16,6 +16,8 @@ function createDrawStore() {
   const groupSize = useStorage<number>('esport-draw.groupSize', 4) // 0 = unlimited
   const autoAssign = useStorage<boolean>('esport-draw.autoAssign', true)
   const drawMode = useStorage<DrawMode>('esport-draw.drawMode', 'wheel')
+  // Target teams-per-group for auto-generate — persisted & shared by every panel.
+  const autoGenTarget = useStorage<number>('esport-draw.autoGenTarget', 4)
 
   // --- transient state ---
   const spinning = ref(false)
@@ -424,6 +426,7 @@ function createDrawStore() {
     groupSize,
     autoAssign,
     drawMode,
+    autoGenTarget,
     spinning,
     result,
     // derived
