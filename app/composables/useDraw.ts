@@ -36,6 +36,19 @@ function createDrawStore() {
   )
   const schools = computed(() => [...new Set(teams.value.map((t) => t.school))])
   const assignedCount = computed(() => teams.value.length - unassignedTeams.value.length)
+
+  /** How many teams each school has; the biggest sets the floor on group count. */
+  const schoolCounts = computed(() => {
+    const m = new Map<string, number>()
+    for (const t of teams.value) m.set(t.school, (m.get(t.school) ?? 0) + 1)
+    return m
+  })
+  const maxPerSchool = computed(() =>
+    schoolCounts.value.size ? Math.max(...schoolCounts.value.values()) : 0,
+  )
+  /** A group holds at most one team per school, so we need at least this many groups
+   *  to place everyone without breaking THE RULE. */
+  const minGroupsRequired = computed(() => Math.max(2, maxPerSchool.value))
   const lastDrawn = computed(() => teams.value.find((t) => t.id === lastDrawnId.value) ?? null)
 
   const membersOf = (g: number) => teams.value.filter((t) => assignments.value[t.id] === g)
@@ -104,8 +117,15 @@ function createDrawStore() {
     assignments.value = next
   }
 
-  // Dropping the group count should release teams assigned to removed groups.
-  watch(numGroups, (n) => {
+  /**
+   * Release teams assigned to groups that no longer exist after the group count
+   * dropped. MUST be called only with a committed, validated integer count (on
+   * blur/@change) — never per-keystroke, or a transient value mid-typing (e.g. "1"
+   * while typing "15") would wipe every assignment above that index.
+   */
+  function pruneAssignmentsToGroupCount() {
+    const n = numGroups.value
+    if (!Number.isInteger(n) || n < 1) return
     let changed = false
     const next = { ...assignments.value }
     for (const id of Object.keys(next)) {
@@ -115,7 +135,7 @@ function createDrawStore() {
       }
     }
     if (changed) assignments.value = next
-  })
+  }
 
   // --- team management ---
   /** Returns an error message, or null on success. */
@@ -297,6 +317,70 @@ function createDrawStore() {
     return { placed, failed }
   }
 
+  /**
+   * Re-distribute EVERY team across the current groups as evenly as possible while
+   * respecting THE RULE. Most-constrained schools are placed first; each team goes
+   * to the least-full group that has no team from its school and isn't full.
+   * Replaces all current assignments. Returns placed/failed counts.
+   */
+  function distributeAll(): { placed: number; failed: number } {
+    // Normalize config to safe integers — a free numeric input can hold a decimal
+    // or empty value, and `new Array(2.5)` below would throw RangeError.
+    const n = Math.max(1, Math.floor(Number(numGroups.value) || 1))
+    if (n !== numGroups.value) numGroups.value = n
+    const cap = Math.max(0, Math.floor(Number(groupSize.value) || 0))
+    if (cap !== groupSize.value) groupSize.value = cap
+    const pool = [...teams.value].sort(
+      (a, b) => (schoolCounts.value.get(b.school) ?? 0) - (schoolCounts.value.get(a.school) ?? 0),
+    )
+    const next: Record<string, number> = {}
+    const sizes = new Array<number>(n).fill(0)
+    const seen: Set<string>[] = Array.from({ length: n }, () => new Set<string>())
+    let placed = 0
+    let failed = 0
+    for (const t of pool) {
+      let best = -1
+      for (let g = 0; g < n; g++) {
+        if (seen[g]!.has(t.school)) continue
+        if (cap > 0 && sizes[g]! >= cap) continue
+        if (best < 0 || sizes[g]! < sizes[best]!) best = g
+      }
+      if (best < 0) {
+        failed++
+        continue
+      }
+      next[t.id] = best
+      sizes[best]!++
+      seen[best]!.add(t.school)
+      placed++
+    }
+    assignments.value = next
+    lastDrawnId.value = null
+    return { placed, failed }
+  }
+
+  /**
+   * Generate the whole bracket layout from the total team count. Picks a group
+   * count that fits everyone — `targetSize` teams per group, but never fewer
+   * groups than THE RULE needs (the biggest school) — then distributes all teams.
+   * `targetSize <= 0` means "as few groups as the rule allows, unlimited size".
+   */
+  function autoGenerate(targetSize = 4): { groups: number; placed: number; failed: number } {
+    const total = teams.value.length
+    const byCapacity = targetSize > 0 ? Math.ceil(total / targetSize) : 0
+    const n = Math.max(byCapacity, minGroupsRequired.value, 1)
+    numGroups.value = n
+    groupSize.value = 0 // unlimited cap — distributeAll balances sizes itself, so all teams fit
+    const res = distributeAll()
+    result.value = {
+      text: res.failed
+        ? `สร้าง ${n} สาย · จัดได้ ${res.placed} ทีม · เหลือ ${res.failed} ทีมที่ติดกติกาโรงเรียน`
+        : `สร้าง ${n} สาย จัดครบ ${res.placed} ทีมเรียบร้อย`,
+      kind: res.failed ? 'warn' : 'ok',
+    }
+    return { groups: n, ...res }
+  }
+
   // --- export ---
   function exportCsv(): boolean {
     if (teams.value.length === 0) return false
@@ -346,6 +430,8 @@ function createDrawStore() {
     unassignedTeams,
     schools,
     assignedCount,
+    maxPerSchool,
+    minGroupsRequired,
     lastDrawn,
     groups,
     currentGroupIndex,
@@ -363,6 +449,9 @@ function createDrawStore() {
     clickGroup,
     moveToGroup,
     autoFill,
+    distributeAll,
+    autoGenerate,
+    pruneAssignmentsToGroupCount,
     exportCsv,
     loadSample,
   }

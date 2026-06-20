@@ -7,12 +7,17 @@ const {
   drawMode,
   unassignedTeams,
   schools,
+  maxPerSchool,
+  minGroupsRequired,
   addTeam,
   importTeams,
   removeTeam,
   loadSample,
   returnAll,
   reset,
+  autoGenerate,
+  distributeAll,
+  pruneAssignmentsToGroupCount,
 } = useDraw()
 const { locked } = useTournament()
 
@@ -22,11 +27,51 @@ const name = ref('')
 const school = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const groupOptions = [2, 3, 4, 5, 6, 8].map((n) => ({ label: `${n} สาย`, value: n }))
-const sizeOptions = [
-  { label: 'ไม่จำกัด', value: 0 },
-  ...[2, 3, 4, 5, 6].map((n) => ({ label: `${n} ทีม/สาย`, value: n })),
-]
+// auto-generate: target teams-per-group (0 = unlimited / fewest groups)
+const targetSize = ref(4)
+const genGroups = computed(() => {
+  const total = teams.value.length
+  const byCap = targetSize.value > 0 ? Math.ceil(total / targetSize.value) : 0
+  return Math.max(byCap, minGroupsRequired.value, 1)
+})
+
+// the school rule needs at least `minGroupsRequired` groups — warn if below it
+const tooFewGroups = computed(() => teams.value.length > 0 && numGroups.value < minGroupsRequired.value)
+
+// Commit handlers (run on blur/@change, NOT per-keystroke). Round to a safe integer,
+// then prune released groups exactly once on the final value.
+function clampGroups() {
+  const n = Math.floor(Number(numGroups.value))
+  numGroups.value = Number.isFinite(n) && n >= 1 ? n : 1
+  pruneAssignmentsToGroupCount()
+}
+function clampSize() {
+  const s = Math.floor(Number(groupSize.value))
+  groupSize.value = Number.isFinite(s) && s >= 0 ? s : 0
+}
+
+function onAutoGenerate() {
+  if (teams.value.length === 0) {
+    toast.add({ title: 'ยังไม่มีทีมให้จัด', color: 'warning', icon: 'i-lucide-circle-alert' })
+    return
+  }
+  const { groups, failed } = autoGenerate(targetSize.value)
+  toast.add({
+    title: `สร้าง ${groups} สายแล้ว${failed ? ` · เหลือ ${failed} ทีมติดกติกา` : ''}`,
+    color: failed ? 'warning' : 'success',
+    icon: failed ? 'i-lucide-triangle-alert' : 'i-lucide-wand-2',
+  })
+}
+
+function onRedistribute() {
+  if (teams.value.length === 0) return
+  const { failed } = distributeAll()
+  toast.add({
+    title: failed ? `จัดใหม่แล้ว · เหลือ ${failed} ทีมติดกติกา` : 'จัดทีมใหม่ให้สมดุลแล้ว',
+    color: failed ? 'warning' : 'success',
+    icon: 'i-lucide-shuffle',
+  })
+}
 
 function onAdd() {
   const error = addTeam(name.value, school.value)
@@ -158,14 +203,70 @@ function downloadTemplate() {
       <span class="text-muted text-[11px]">คอลัมน์: ชื่อทีม, โรงเรียน</span>
     </div>
 
-    <!-- config -->
+    <!-- config — free numeric inputs (unlimited groups & size) -->
     <div class="mt-4 grid grid-cols-2 gap-3">
-      <UFormField label="จำนวนสาย">
-        <USelect v-model="numGroups" :items="groupOptions" class="w-full" :disabled="locked" />
+      <UFormField label="จำนวนสาย" help="ไม่จำกัด">
+        <UInput
+          v-model.number="numGroups"
+          type="number"
+          min="1"
+          class="w-full"
+          :disabled="locked"
+          @change="clampGroups"
+        />
       </UFormField>
-      <UFormField label="ทีมต่อสาย (สูงสุด)">
-        <USelect v-model="groupSize" :items="sizeOptions" class="w-full" :disabled="locked" />
+      <UFormField label="ทีมต่อสาย" help="0 = ไม่จำกัด">
+        <UInput
+          v-model.number="groupSize"
+          type="number"
+          min="0"
+          class="w-full"
+          :disabled="locked"
+          @change="clampSize"
+        />
       </UFormField>
+    </div>
+
+    <!-- rule-floor warning -->
+    <UAlert
+      v-if="tooFewGroups"
+      color="warning"
+      variant="soft"
+      icon="i-lucide-triangle-alert"
+      class="mt-3"
+      :title="`ต้องมีอย่างน้อย ${minGroupsRequired} สาย`"
+      :description="`มีโรงเรียนที่ส่ง ${maxPerSchool} ทีม — สายต้องไม่น้อยกว่านี้ ไม่งั้นจัดทีมไม่ครบ`"
+    />
+
+    <!-- auto-generate from total teams -->
+    <div class="border-default bg-elevated/40 mt-3 rounded-xl border p-3">
+      <p class="text-highlighted mb-2 flex items-center gap-1.5 text-xs font-semibold">
+        <UIcon name="i-lucide-wand-2" class="text-primary size-4" />
+        สร้างสายอัตโนมัติจากจำนวนทีม
+      </p>
+      <div class="flex items-end gap-2">
+        <UFormField label="ทีม/สาย (โดยประมาณ)" class="flex-1">
+          <UInput v-model.number="targetSize" type="number" min="0" class="w-full" :disabled="locked" />
+        </UFormField>
+        <UButton color="primary" icon="i-lucide-sparkles" :disabled="locked" @click="onAutoGenerate">
+          สร้าง
+        </UButton>
+      </div>
+      <p class="text-muted mt-2 text-[11px]">
+        {{ teams.length }} ทีม → <span class="text-primary font-semibold">{{ genGroups }} สาย</span>
+        · กระจายทุกทีมแบบสมดุลและคนละโรงเรียน
+      </p>
+      <UButton
+        color="neutral"
+        variant="ghost"
+        size="xs"
+        icon="i-lucide-shuffle"
+        class="mt-1"
+        :disabled="locked"
+        @click="onRedistribute"
+      >
+        จัดทีมใหม่ให้สมดุล (ใช้สายเดิม)
+      </UButton>
     </div>
 
     <USwitch
