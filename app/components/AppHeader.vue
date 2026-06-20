@@ -21,8 +21,19 @@
       </div>
     </div>
 
-    <UBadge color="primary" variant="soft" size="lg" icon="i-lucide-scale">
-      กติกา: ทีมในสายเดียวกันต้องคนละโรงเรียน
-    </UBadge>
+    <div class="flex items-center gap-2">
+      <UBadge color="primary" variant="soft" size="lg" icon="i-lucide-scale">
+        กติกา: ทีมในสายเดียวกันต้องคนละโรงเรียน
+      </UBadge>
+      <UButton
+        to="/help"
+        color="neutral"
+        variant="ghost"
+        size="lg"
+        icon="i-lucide-circle-help"
+        aria-label="วิธีใช้งาน"
+        title="วิธีใช้งาน"
+      />
+    </div>
   </header>
 </template>
