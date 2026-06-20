@@ -11,6 +11,7 @@ const {
   autoFill,
   exportCsv,
 } = useDraw()
+const { canStartGroup, startGroupStage } = useTournament()
 
 // The bracket being filled next (auto mode only, when nothing awaits manual placement).
 function isCurrent(index: number) {
@@ -19,6 +20,13 @@ function isCurrent(index: number) {
 
 const toast = useToast()
 const shaking = ref<number | null>(null)
+
+function onStartGroup() {
+  const res = startGroupStage()
+  if (!res.ok) {
+    toast.add({ title: `เริ่มไม่ได้: ${res.reason}`, color: 'error', icon: 'i-lucide-circle-alert' })
+  }
+}
 
 function onClickGroup(index: number) {
   if (!lastDrawn.value) return
@@ -143,6 +151,16 @@ function emptySlots(memberCount: number) {
         </UButton>
         <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-zap" @click="onAutoFill">
           จัดที่เหลือทั้งหมด
+        </UButton>
+        <UButton
+          color="primary"
+          size="sm"
+          icon="i-lucide-play"
+          :disabled="!canStartGroup"
+          :title="canStartGroup ? 'เริ่มรอบแบ่งกลุ่ม' : 'ต้องมีทีมอย่างน้อย 2 ทีมต่อสาย'"
+          @click="onStartGroup"
+        >
+          เริ่มรอบแบ่งกลุ่ม
         </UButton>
       </div>
       <p class="text-muted mt-2 text-xs leading-relaxed">

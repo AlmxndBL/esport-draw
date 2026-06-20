@@ -12,6 +12,7 @@ const {
   returnAll,
   reset,
 } = useDraw()
+const { locked } = useTournament()
 
 const toast = useToast()
 
@@ -46,7 +47,12 @@ function onReset() {
         <h2 class="text-muted text-sm font-semibold uppercase tracking-wider">
           ① ตั้งค่า &amp; รายชื่อทีม
         </h2>
-        <UBadge color="secondary" variant="soft">{{ teams.length }} ทีม</UBadge>
+        <div class="flex items-center gap-2">
+          <UBadge v-if="locked" color="warning" variant="soft" icon="i-lucide-lock">
+            ล็อกระหว่างแข่ง
+          </UBadge>
+          <UBadge color="secondary" variant="soft">{{ teams.length }} ทีม</UBadge>
+        </div>
       </div>
     </template>
 
@@ -58,6 +64,7 @@ function onReset() {
           placeholder="ชื่อทีม เช่น Dragon Squad"
           icon="i-lucide-users"
           class="w-full"
+          :disabled="locked"
           @keydown.enter="onAdd"
         />
         <div class="flex gap-2">
@@ -68,9 +75,10 @@ function onReset() {
             class="flex-1"
             :ui="{ root: 'w-full' }"
             list="school-list"
+            :disabled="locked"
             @keydown.enter="onAdd"
           />
-          <UButton icon="i-lucide-plus" color="primary" @click="onAdd">เพิ่ม</UButton>
+          <UButton icon="i-lucide-plus" color="primary" :disabled="locked" @click="onAdd">เพิ่ม</UButton>
         </div>
         <datalist id="school-list">
           <option v-for="s in schools" :key="s" :value="s" />
@@ -81,10 +89,10 @@ function onReset() {
     <!-- config -->
     <div class="mt-4 grid grid-cols-2 gap-3">
       <UFormField label="จำนวนสาย">
-        <USelect v-model="numGroups" :items="groupOptions" class="w-full" />
+        <USelect v-model="numGroups" :items="groupOptions" class="w-full" :disabled="locked" />
       </UFormField>
       <UFormField label="ทีมต่อสาย (สูงสุด)">
-        <USelect v-model="groupSize" :items="sizeOptions" class="w-full" />
+        <USelect v-model="groupSize" :items="sizeOptions" class="w-full" :disabled="locked" />
       </UFormField>
     </div>
 
@@ -93,6 +101,7 @@ function onReset() {
       class="mt-4"
       label="เติมทีละสายอัตโนมัติหลังหมุน"
       description="เติมสายปัจจุบันให้เต็มก่อน ถ้าโรงเรียนซ้ำจะข้ามไปสายถัดไปทันที"
+      :disabled="locked"
     />
 
     <!-- stats -->
@@ -113,13 +122,13 @@ function onReset() {
 
     <!-- bulk actions -->
     <div class="mt-3 flex flex-wrap gap-2">
-      <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-clipboard-list" @click="loadSample">
+      <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-clipboard-list" :disabled="locked" @click="loadSample">
         ข้อมูลตัวอย่าง
       </UButton>
-      <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-undo-2" @click="returnAll">
+      <UButton color="neutral" variant="soft" size="sm" icon="i-lucide-undo-2" :disabled="locked" @click="returnAll">
         คืนทุกทีม
       </UButton>
-      <UButton color="error" variant="soft" size="sm" icon="i-lucide-trash-2" @click="onReset">
+      <UButton color="error" variant="soft" size="sm" icon="i-lucide-trash-2" :disabled="locked" @click="onReset">
         ล้างทั้งหมด
       </UButton>
     </div>

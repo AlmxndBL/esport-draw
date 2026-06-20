@@ -144,6 +144,7 @@ function createDrawStore() {
     assignments.value = {}
     lastDrawnId.value = null
     result.value = { text: 'คืนทุกทีมกลับสู่กองรอจับสายแล้ว', kind: 'idle' }
+    useTournament().resetTournament()
   }
 
   function reset() {
@@ -151,6 +152,7 @@ function createDrawStore() {
     assignments.value = {}
     lastDrawnId.value = null
     result.value = { text: 'กดปุ่มหมุนเพื่อสุ่มทีมแรก', kind: 'idle' }
+    useTournament().resetTournament()
   }
 
   // --- drawing & placement ---
