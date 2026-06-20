@@ -4,9 +4,11 @@ const {
   numGroups,
   groupSize,
   autoAssign,
+  drawMode,
   unassignedTeams,
   schools,
   addTeam,
+  importTeams,
   removeTeam,
   loadSample,
   returnAll,
@@ -18,6 +20,7 @@ const toast = useToast()
 
 const name = ref('')
 const school = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const groupOptions = [2, 3, 4, 5, 6, 8].map((n) => ({ label: `${n} สาย`, value: n }))
 const sizeOptions = [
@@ -37,6 +40,44 @@ function onAdd() {
 
 function onReset() {
   if (confirm('ล้างทีมและสายทั้งหมด?')) reset()
+}
+
+// ── CSV import ──
+function triggerImport() {
+  fileInput.value?.click()
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const text = await file.text()
+    const entries = teamsFromCsvRows(parseCsv(text))
+    if (entries.length === 0) {
+      toast.add({
+        title: 'ไม่พบข้อมูลทีมในไฟล์',
+        description: 'ต้องมีคอลัมน์ชื่อทีม และโรงเรียน',
+        color: 'warning',
+        icon: 'i-lucide-file-x',
+      })
+      return
+    }
+    const { added, skipped } = importTeams(entries)
+    toast.add({
+      title: `นำเข้า ${added} ทีม${skipped > 0 ? ` · ข้าม ${skipped} (ซ้ำ/ไม่ครบ)` : ''}`,
+      color: added > 0 ? 'success' : 'warning',
+      icon: 'i-lucide-file-check',
+    })
+  } catch {
+    toast.add({ title: 'อ่านไฟล์ไม่สำเร็จ', color: 'error', icon: 'i-lucide-circle-alert' })
+  } finally {
+    input.value = '' // allow re-importing the same file
+  }
+}
+
+function downloadTemplate() {
+  downloadFile('esport-teams-template.csv', csvTemplate())
 }
 </script>
 
@@ -86,6 +127,37 @@ function onReset() {
       </div>
     </UFormField>
 
+    <!-- CSV import -->
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".csv,text/csv"
+        class="hidden"
+        @change="onFileChange"
+      />
+      <UButton
+        color="primary"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-file-up"
+        :disabled="locked"
+        @click="triggerImport"
+      >
+        นำเข้า CSV
+      </UButton>
+      <UButton
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        icon="i-lucide-file-down"
+        @click="downloadTemplate"
+      >
+        เทมเพลต
+      </UButton>
+      <span class="text-muted text-[11px]">คอลัมน์: ชื่อทีม, โรงเรียน</span>
+    </div>
+
     <!-- config -->
     <div class="mt-4 grid grid-cols-2 gap-3">
       <UFormField label="จำนวนสาย">
@@ -97,6 +169,7 @@ function onReset() {
     </div>
 
     <USwitch
+      v-if="drawMode === 'wheel'"
       v-model="autoAssign"
       class="mt-4"
       label="เติมทีละสายอัตโนมัติหลังหมุน"
@@ -133,8 +206,8 @@ function onReset() {
       </UButton>
     </div>
 
-    <!-- pool list -->
-    <div class="mt-4">
+    <!-- pool list (wheel mode only — manual mode shows a draggable pool instead) -->
+    <div v-if="drawMode === 'wheel'" class="mt-4">
       <p class="text-muted mb-2 text-xs">ทีมที่รอจับสาย</p>
       <div class="max-h-72 space-y-1.5 overflow-y-auto pr-1">
         <p v-if="unassignedTeams.length === 0" class="text-muted py-6 text-center text-sm">

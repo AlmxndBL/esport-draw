@@ -1,5 +1,5 @@
 import { useStorage } from '@vueuse/core'
-import type { Team, GroupView, ResultMessage } from '~/types'
+import type { Team, GroupView, ResultMessage, DrawMode } from '~/types'
 
 /**
  * Single source of truth for the draw system: team pool, group assignments,
@@ -15,6 +15,7 @@ function createDrawStore() {
   const numGroups = useStorage<number>('esport-draw.numGroups', 4)
   const groupSize = useStorage<number>('esport-draw.groupSize', 4) // 0 = unlimited
   const autoAssign = useStorage<boolean>('esport-draw.autoAssign', true)
+  const drawMode = useStorage<DrawMode>('esport-draw.drawMode', 'wheel')
 
   // --- transient state ---
   const spinning = ref(false)
@@ -130,6 +131,34 @@ function createDrawStore() {
     return null
   }
 
+  /**
+   * Bulk-add teams (e.g. from a CSV import). Skips blanks and any name that
+   * already exists (case-insensitive), so re-importing is idempotent.
+   * Returns how many were added vs skipped.
+   */
+  function importTeams(entries: { name: string; school: string }[]): {
+    added: number
+    skipped: number
+  } {
+    const next = [...teams.value]
+    const names = new Set(next.map((t) => t.name.toLowerCase()))
+    let added = 0
+    let skipped = 0
+    for (const e of entries) {
+      const name = e.name.trim()
+      const school = e.school.trim()
+      if (!name || !school || names.has(name.toLowerCase())) {
+        skipped++
+        continue
+      }
+      next.push({ id: uid(), name, school })
+      names.add(name.toLowerCase())
+      added++
+    }
+    if (added > 0) teams.value = next
+    return { added, skipped }
+  }
+
   function removeTeam(id: string) {
     teams.value = teams.value.filter((t) => t.id !== id)
     unplace(id)
@@ -198,6 +227,29 @@ function createDrawStore() {
     result.value = {
       text: `สุ่มได้ ${team.name} (${team.school}) — เลือกสายขอบเขียวเพื่อวางทีม`,
       kind: 'pick',
+    }
+  }
+
+  /**
+   * Move any team into a group by id — used by the drag-and-drop / click-to-place
+   * manual mode. Enforces THE RULE (different school + not full). Passing g = -1
+   * returns the team to the pool. Returns whether it succeeded + why not.
+   */
+  function moveToGroup(id: string, g: number): { ok: boolean; reason?: string } {
+    const team = teams.value.find((t) => t.id === id)
+    if (!team) return { ok: false }
+    if (g < 0) {
+      unplace(id)
+      return { ok: true }
+    }
+    if (assignments.value[id] === g) return { ok: true } // already there — no-op
+    if (isValidTarget(team, g)) {
+      place(id, g)
+      return { ok: true }
+    }
+    return {
+      ok: false,
+      reason: isFull(g) ? 'สายนี้เต็มแล้ว' : `มีทีมจาก ${team.school} อยู่ในสายนี้แล้ว`,
     }
   }
 
@@ -287,6 +339,7 @@ function createDrawStore() {
     numGroups,
     groupSize,
     autoAssign,
+    drawMode,
     spinning,
     result,
     // derived
@@ -301,12 +354,14 @@ function createDrawStore() {
     validGroupsFor,
     // actions
     addTeam,
+    importTeams,
     removeTeam,
     returnToPool,
     returnAll,
     reset,
     finishDraw,
     clickGroup,
+    moveToGroup,
     autoFill,
     exportCsv,
     loadSample,

@@ -8,6 +8,9 @@ export interface Team {
 /** Kind of feedback shown after a draw / action — drives the result banner color. */
 export type ResultKind = 'idle' | 'ok' | 'warn' | 'pick'
 
+/** How teams get assigned to groups: spin the wheel, or drag-and-drop by hand. */
+export type DrawMode = 'wheel' | 'manual'
+
 export interface ResultMessage {
   text: string
   kind: ResultKind
